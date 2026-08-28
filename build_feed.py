@@ -54,6 +54,16 @@ def item_ids(h):
     return out
 
 
+def sold_out_ids(h):
+    """Item IDs whose listing card carries BASE's server-rendered SOLD OUT tag."""
+    out = set()
+    for li in re.findall(r'<li class="items-archive__item">(.*?)</li>', h, re.S):
+        m = re.search(r'/items/(\d+)', li)
+        if m and re.search(r'items-archive__tag[^>]*>\s*SOLD OUT', li):
+            out.add(m.group(1))
+    return out
+
+
 def category_tree(h):
     """[(parent_name, child_name, url)] from the header navigation."""
     out = []
@@ -73,7 +83,7 @@ def category_tree(h):
     return out
 
 
-def parse_item(h, item_id):
+def parse_item(h, item_id, listing_sold_out=None):
     title = ""
     m = re.search(r'<h1 class="item-detail__ttl">(.*?)</h1>', h, re.S)
     if m:
@@ -114,6 +124,11 @@ def parse_item(h, item_id):
             elif "purchaseButton__btn--addToCart" in seg:
                 availability = "in stock"
 
+    # The listing pages carry a server-rendered SOLD OUT tag that does not depend on
+    # how the purchase form is rendered (it differed between JP and overseas requests).
+    if listing_sold_out is not None:
+        availability = "out of stock" if listing_sold_out else "in stock"
+
     image = meta(h, "og:image")
     imgs = []
     box = re.search(r'<div class="item-detail__imgBox">.*?<div class="item-detail__txtBox">', h, re.S)
@@ -148,6 +163,7 @@ def main(out_path):
     top = fetch(SHOP + "/")
     ids = item_ids(top)
     print(f"items on top page: {len(ids)}", file=sys.stderr)
+    listed, sold_out = set(ids), sold_out_ids(top)
 
     # item -> category path (first hit wins; parent name doubles as brand)
     cat_of = {}
@@ -157,11 +173,13 @@ def main(out_path):
         except Exception as e:  # keep going; category is optional metadata
             print(f"category fetch failed {curl}: {e}", file=sys.stderr)
             continue
+        sold_out |= sold_out_ids(ch)
         for iid in item_ids(ch):
+            listed.add(iid)
             if iid not in ids:
                 ids.append(iid)
             cat_of.setdefault(iid, (pname, cname))
-    print(f"items incl. categories: {len(ids)}", file=sys.stderr)
+    print(f"items incl. categories: {len(ids)}, sold out per listings: {len(sold_out)}", file=sys.stderr)
 
     rows = []
     for iid in ids:
@@ -170,7 +188,7 @@ def main(out_path):
         except Exception as e:
             print(f"item fetch failed {iid}: {e}", file=sys.stderr)
             continue
-        row = parse_item(h, iid)
+        row = parse_item(h, iid, (iid in sold_out) if iid in listed else None)
         if iid in cat_of:
             pname, cname = cat_of[iid]
             row["product_type"] = f"{pname} > {cname}" if cname else pname
