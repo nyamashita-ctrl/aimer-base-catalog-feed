@@ -116,9 +116,9 @@ def parse_item(h, item_id):
 
     image = meta(h, "og:image")
     imgs = []
-    slider = re.search(r'<ul class="item-detail__mainSlider__list.*?</ul>', h, re.S)
-    if slider:
-        for u in re.findall(r'(https://baseec-img-mng\.akamaized\.net/images/item/origin/[^"?\s]+)', slider.group(0)):
+    box = re.search(r'<div class="item-detail__imgBox">.*?<div class="item-detail__txtBox">', h, re.S)
+    if box:
+        for u in re.findall(r'(https://baseec-img-mng\.akamaized\.net/images/item/origin/[^"?\s]+)', box.group(0)):
             u = u + "?imformat=generic&q=90&im=Resize,width=1200,type=normal"
             if u not in imgs:
                 imgs.append(u)
