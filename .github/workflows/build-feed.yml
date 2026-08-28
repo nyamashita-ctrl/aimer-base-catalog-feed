@@ -22,14 +22,19 @@ jobs:
           python-version: "3.12"
       - name: Build feed.csv
         run: python build_feed.py feed.csv
-      - name: Commit if changed
+      # Always commit a build stamp: GitHub disables scheduled workflows after
+      # 60 days without repository activity, and a stable catalog would otherwise
+      # go silent without anyone noticing.
+      - name: Commit feed and build stamp
         run: |
           git config user.name "feed-bot"
           git config user.email "feed-bot@users.noreply.github.com"
-          if git diff --quiet -- feed.csv; then
-            echo "feed unchanged"
+          date -u +%Y-%m-%dT%H:%MZ > .last_build
+          git add feed.csv .last_build
+          if git diff --cached --quiet -- feed.csv; then
+            msg="Build stamp $(cat .last_build) (feed unchanged)"
           else
-            git add feed.csv
-            git commit -m "Update feed.csv ($(date -u +%Y-%m-%dT%H:%MZ))"
-            git push
+            msg="Update feed.csv ($(cat .last_build))"
           fi
+          git commit -m "$msg"
+          git push
