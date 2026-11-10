@@ -38,3 +38,15 @@ jobs:
           fi
           git commit -m "$msg"
           git push
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          SLACK_TOKEN: ${{ secrets.CI_ALERT_SLACK_TOKEN || secrets.SLACK_BOT_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$SLACK_TOKEN" ]; then echo "::warning::CI_ALERT_SLACK_TOKEN is not set; skipped the Slack alert"; exit 0; fi
+          text=$(printf ':rotating_light: <@U04FLQ96UV6> GitHub Actions が失敗しました。ログを確認してください: %s / %s\n%s' "${GITHUB_REPOSITORY#*/}" "$GITHUB_WORKFLOW" "$RUN_URL")
+          jq -n --arg channel C0BTFL5RN20 --arg text "$text" '{channel: $channel, text: $text}' \
+            | curl -sS -X POST https://slack.com/api/chat.postMessage \
+                -H "Authorization: Bearer $SLACK_TOKEN" -H 'Content-Type: application/json; charset=utf-8' \
+                --data @- | jq -r '"slack ok=\(.ok) \(.error // "")"'
